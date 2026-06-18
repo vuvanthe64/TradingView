@@ -12,14 +12,13 @@ function formatTickTime(time){
 }
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}function normalizeBlSettings(raw){const src=raw&&typeof raw==="object"?raw:{};return{fast:{length:clamp(parseInt(src.fast?.length??BL_DEFAULTS.fast.length)||BL_DEFAULTS.fast.length,1,1000),phase:clamp(parseFloat(src.fast?.phase??BL_DEFAULTS.fast.phase)||0,-100,100),power:clamp(parseInt(src.fast?.power??BL_DEFAULTS.fast.power)||BL_DEFAULTS.fast.power,1,10)},slow:{length:clamp(parseInt(src.slow?.length??BL_DEFAULTS.slow.length)||BL_DEFAULTS.slow.length,1,1000),phase:clamp(parseFloat(src.slow?.phase??BL_DEFAULTS.slow.phase)||0,-100,100),power:clamp(parseInt(src.slow?.power??BL_DEFAULTS.slow.power)||BL_DEFAULTS.slow.power,1,10)}}}function loadBlSettings(){try{return normalizeBlSettings(JSON.parse(localStorage.getItem("xtb_bl_jma_settings")||"{}"))}catch(e){return normalizeBlSettings({})}}function saveBlSettings(){localStorage.setItem("xtb_bl_jma_settings",JSON.stringify(blSettings))}function blName(kind){return `BL ${blSettings[kind].length}`}function setIfText(id,value){const el=$(id);if(el)el.textContent=value}function syncBlSettingsUi(){setIfText("blFastToggleLabel",blName("fast"));setIfText("blSlowToggleLabel",blName("slow"));setIfText("blFastValueLabel",blName("fast"));setIfText("blSlowValueLabel",blName("slow"));[["blFastLength",blSettings.fast.length],["blFastPhase",blSettings.fast.phase],["blFastPower",blSettings.fast.power],["blSlowLength",blSettings.slow.length],["blSlowPhase",blSettings.slow.phase],["blSlowPower",blSettings.slow.power]].forEach(([id,v])=>{const el=$(id);if(el)el.value=v});if(typeof baselineFastSeries!=="undefined")baselineFastSeries.applyOptions({title:blName("fast")});if(typeof baselineSlowSeries!=="undefined")baselineSlowSeries.applyOptions({title:blName("slow")})}function readBlSettingsFromUi(){blSettings=normalizeBlSettings({fast:{length:$("blFastLength")?.value,phase:$("blFastPhase")?.value,power:$("blFastPower")?.value},slow:{length:$("blSlowLength")?.value,phase:$("blSlowPhase")?.value,power:$("blSlowPower")?.value}});saveBlSettings();syncBlSettingsUi();drawCharts()}
 
-const priceChart=LightweightCharts.createChart($("priceChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.18)"},horzLines:{color:"rgba(42,46,57,.18)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime},localization:{locale:"vi-VN",timeFormatter:formatChartTime},crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});const candleSeries=priceChart.addCandlestickSeries({upColor:"#ffffff",downColor:"#b8bec9",borderUpColor:"#ffffff",borderDownColor:"#b8bec9",wickUpColor:"#ffffff",wickDownColor:"#b8bec9"});const volumeSeries=priceChart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"",lastValueVisible:false,priceLineVisible:false,scaleMargins:{top:.8,bottom:0}});
+const priceChart=LightweightCharts.createChart($("priceChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.18)"},horzLines:{color:"rgba(42,46,57,.18)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime,rightOffset:5,barSpacing:6},localization:{locale:"vi-VN",timeFormatter:formatChartTime},crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});const candleSeries=priceChart.addCandlestickSeries({upColor:"#ffffff",downColor:"#b8bec9",borderUpColor:"#ffffff",borderDownColor:"#b8bec9",wickUpColor:"#ffffff",wickDownColor:"#b8bec9"});const volumeSeries=priceChart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"",lastValueVisible:false,priceLineVisible:false,scaleMargins:{top:.8,bottom:0}});
 const volMaSeries=priceChart.addLineSeries({color:"rgba(255, 255, 255, 0.4)",lineWidth:1,priceScaleId:"",lastValueVisible:false,priceLineVisible:false});volMaSeries.priceScale().applyOptions({scaleMargins:{top:.8,bottom:0}});
 const emaPriceSeries=priceChart.addLineSeries({color:"#f0b90b",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const wmaPriceSeries=priceChart.addLineSeries({color:"#38bdf8",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const vwapSeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const baselineFastSeries=priceChart.addLineSeries({color:"#ffd54f",lineWidth:2,title:"BL 50",lastValueVisible:false,priceLineVisible:false});const baselineSlowSeries=priceChart.addLineSeries({color:"#9c27b0",lineWidth:2,title:"BL 200",lastValueVisible:false,priceLineVisible:false});const btEntrySeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btSlSeries=priceChart.addLineSeries({color:"#ff3b30",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btTpSeries=priceChart.addLineSeries({color:"#00c853",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});let backtestTrades=[],backtestReplayIndex=0,backtestReplayTimer=null;
-const rsiChart=LightweightCharts.createChart($("rsiChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.14)"},horzLines:{color:"rgba(42,46,57,.14)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime},localization:{locale:"vi-VN",timeFormatter:formatChartTime}});const rsiSeries=rsiChart.addLineSeries({color:"#fff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiEmaSeries=rsiChart.addLineSeries({color:"#ff9800",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiWmaSeries=rsiChart.addLineSeries({color:"#ff3b30",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsi70=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi50=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi30=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});
+const rsiChart=LightweightCharts.createChart($("rsiChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.14)"},horzLines:{color:"rgba(42,46,57,.14)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime,rightOffset:5,barSpacing:6},localization:{locale:"vi-VN",timeFormatter:formatChartTime}});const rsiSeries=rsiChart.addLineSeries({color:"#fff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiEmaSeries=rsiChart.addLineSeries({color:"#ff9800",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiWmaSeries=rsiChart.addLineSeries({color:"#ff3b30",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsi70=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi50=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi30=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});
 
 let lastRangeHash="";priceChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(!r)return;const hash=`${r.from.toFixed(2)}|${r.to.toFixed(2)}`;if(lastRangeHash===hash)return;lastRangeHash=hash;rsiChart.timeScale().setVisibleLogicalRange(r)});rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(!r)return;const hash=`${r.from.toFixed(2)}|${r.to.toFixed(2)}`;if(lastRangeHash===hash)return;lastRangeHash=hash;priceChart.timeScale().setVisibleLogicalRange(r)});
 
-// TÍNH TOÁN DATA
 function getTimeframeConfig(tf){const predefined={"1h":{apiTf:"1h",aggregate:1,label:"1H"},"4h":{apiTf:"4h",aggregate:1,label:"4H"},"12h":{apiTf:"12h",aggregate:1,label:"12H"},"1d":{apiTf:"1d",aggregate:1,label:"1D"},"2d":{apiTf:"1d",aggregate:2,label:"2D"},"3d":{apiTf:"3d",aggregate:1,label:"3D"},"1w":{apiTf:"1w",aggregate:1,label:"W"},"2w":{apiTf:"1w",aggregate:2,label:"2W"},"1M":{apiTf:"1M",aggregate:1,label:"M"}};if(predefined[tf])return predefined[tf];const match=tf.match(/^(\d+)([mhdWMY])$/);if(!match)return{apiTf:"1h",aggregate:1,label:"1H"};const num=parseInt(match[1]);const unit=match[2];let apiTf="1h",aggregate=1;if(unit==='m'){if([1,3,5,15,30].includes(num)){apiTf=num+"m";aggregate=1}else if(num%30===0){apiTf="30m";aggregate=num/30}else if(num%15===0){apiTf="15m";aggregate=num/15}else if(num%5===0){apiTf="5m";aggregate=num/5}else{apiTf="1m";aggregate=num}}else if(unit==='h'){if([1,2,4,6,8,12].includes(num)){apiTf=num+"h";aggregate=1}else{apiTf="1h";aggregate=num}}else if(unit==='d'){if([1,3].includes(num)){apiTf=num+"d";aggregate=1}else{apiTf="1d";aggregate=num}}else if(unit==='W'){apiTf="1w";aggregate=num}else if(unit==='M'){apiTf="1M";aggregate=num}else if(unit==='Y'){apiTf="1M";aggregate=num*12}return{apiTf,aggregate,label:num+(unit==='m'?'m':unit.toUpperCase())}}function getHistoryTargetLimit(tf=currentTf){const c={"1h":5000,"4h":5000,"12h":4000,"1d":3000,"2d":3000,"3d":2200,"1w":1200,"2w":1200,"1M":1000};if(c[tf])return c[tf];if(tf.endsWith('m'))return 5000;if(tf.endsWith('h'))return 4000;if(tf.endsWith('d'))return 3000;return 1500}function sleep(ms){return new Promise(r=>setTimeout(r,ms))}async function fetchHistoricalKlines(){const cfg=getTimeframeConfig(currentTf),target=getHistoryTargetLimit(currentTf);let endTime=Date.now(),all=[];for(let i=0;i<Math.ceil(target/1000)+2&&all.length<target;i++){const limit=Math.min(1000,target-all.length);const url=`${API}/api/v3/klines?symbol=${currentSymbol}&interval=${cfg.apiTf}&limit=${limit}&endTime=${endTime}`;const res=await fetch(url);if(!res.ok)throw new Error("Binance HTTP "+res.status);const part=await res.json();if(!Array.isArray(part)||!part.length)break;all=part.concat(all);endTime=part[0][0]-1;if(part.length<limit)break;await sleep(80)}return all.slice(-target).map(toChartCandle)}function toChartCandle(k){return{time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}}function aggregateCandles(src,g){if(g<=1)return src.slice();let r=[];for(let i=0;i<src.length;i+=g){const a=src.slice(i,i+g);if(a.length)r.push({time:a[0].time,open:a[0].open,high:Math.max(...a.map(x=>x.high)),low:Math.min(...a.map(x=>x.low)),close:a[a.length-1].close,volume:a.reduce((s,x)=>s+x.volume,0)})}return r}function refreshCandlesFromRaw(){candles=aggregateCandles(rawCandles,getTimeframeConfig(currentTf).aggregate)}function ema(data,n){let r=[],k=2/(n+1),p=null;data.forEach((c,i)=>{if(i<n-1)return;if(p===null){p=data.slice(i-n+1,i+1).reduce((s,x)=>s+x.close,0)/n}else p=c.close*k+p*(1-k);r.push({time:c.time,value:p})});return r}function wma(data,n){let r=[],ws=n*(n+1)/2;for(let i=n-1;i<data.length;i++){let s=0;for(let j=0;j<n;j++)s+=data[i-j].close*(n-j);r.push({time:data[i].time,value:s/ws})}return r}function rsi(data,n=14){let r=[];if(data.length<=n+1)return r;let g=0,l=0;for(let i=1;i<=n;i++){const d=data[i].close-data[i-1].close;if(d>=0)g+=d;else l-=d}let ag=g/n,al=l/n;for(let i=n+1;i<data.length;i++){const d=data[i].close-data[i-1].close,gain=d>0?d:0,loss=d<0?-d:0;ag=(ag*(n-1)+gain)/n;al=(al*(n-1)+loss)/n;const rs=al===0?100:ag/al;r.push({time:data[i].time,value:100-100/(1+rs)})}return r}function jma(data,length=50,power=2,phase=0){let r=[],phaseRatio=phase<-100?.5:phase>100?2.5:phase/100+1.5,beta=.45*(length-1)/(.45*(length-1)+2),alpha=Math.pow(beta,power),e0=0,e1=0,e2=0,prevJma=0;data.forEach(c=>{const src=c.close;e0=(1-alpha)*src+alpha*e0;e1=(src-e0)*(1-beta)+beta*e1;e2=(e0+phaseRatio*e1-prevJma)*Math.pow(1-alpha,2)+Math.pow(alpha,2)*e2;prevJma=e2+prevJma;r.push({time:c.time,value:prevJma})});return r}
 function getVwapColor(a=vwapAnchor){return a==="W"?"#2962ff":"#ffffff"}function updateVwapColor(){const color=getVwapColor();vwapSeries.applyOptions({color});document.querySelector('.vwap').style.background=color;document.querySelectorAll('.vwap-text').forEach(e=>e.style.color=color)}function getVwapBucket(time,anchor){const d=dateInUtcPlus7(time);if(anchor==="W"){const y=d.getUTCFullYear(),m=d.getUTCMonth(),day=d.getUTCDate(),dow=d.getUTCDay(),days=(dow+6)%7;const monday=new Date(Date.UTC(y,m,day-days,0,0,0));return `${monday.getUTCFullYear()}-${pad2(monday.getUTCMonth()+1)}-${pad2(monday.getUTCDate())}`}if(anchor==="M")return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}`;return `${d.getUTCFullYear()}`}function anchoredVwap(data,anchor="W"){let r=[],bucket=null,pv=0,vol=0;data.forEach(c=>{const b=getVwapBucket(c.time,anchor);if(b!==bucket){bucket=b;pv=0;vol=0}const tp=(c.high+c.low+c.close)/3;pv+=tp*c.volume;vol+=c.volume;if(vol>0)r.push({time:c.time,value:pv/vol})});return r}
 function smaVol(data, n) {let r=[];let sum=0;for(let i=0;i<data.length;i++){sum+=data[i].value;if(i>=n)sum-=data[i-n].value;if(i>=n-1)r.push({time:data[i].time,value:sum/n})}return r;}
@@ -31,21 +30,18 @@ cache={emaPriceData,wmaPriceData,volumeData,volMaData,vwapData,baselineFastData,
 function updateIndicatorValues(d){setValueText("vEmaPrice",indicatorState.emaPrice?lastValue(d.emaPriceData):null);setValueText("vWmaPrice",indicatorState.wmaPrice?lastValue(d.wmaPriceData):null);setValueText("vVolume",indicatorState.volume&&d.volumeData.length?d.volumeData[d.volumeData.length-1].value:null,fmtVol);setValueText("vVwap",indicatorState.vwap?lastValue(d.vwapData):null);setIfText("vVwapAnchor",vwapAnchor);setValueText("vBaselineFast",indicatorState.baselineFast?lastValue(d.baselineFastData):null);setValueText("vBaselineSlow",indicatorState.baselineSlow?lastValue(d.baselineSlowData):null);setValueText("vRsi",indicatorState.rsi?lastValue(d.rsiData):null);setValueText("vRsiEma",indicatorState.rsiEma?lastValue(d.rsiEmaData):null);setValueText("vRsiWma",indicatorState.rsiWma?lastValue(d.rsiWmaData):null)}
 function closeSocket(ws){if(!ws)return;ws.onopen=ws.onmessage=ws.onerror=ws.onclose=null;try{ws.close()}catch(e){}}async function backgroundResyncKlines(){if(document.hidden)return;try{const s=wsSession;const data=await fetchHistoricalKlines();if(s!==wsSession)return;rawCandles=data;refreshCandlesFromRaw();drawCharts();updateLatestPrice()}catch(e){console.warn(e)}}
 
-// KHỞI TẠO CỤM CHÍNH VÀ FIX ĐẨY LÙI VỀ GIỮA
 async function loadKlines(){const s=++wsSession;closeSocket(klineWs);closeSocket(tickerWs);try{setStatus(false,`Đang tải dữ liệu lịch sử ${getHistoryTargetLimit(currentTf)} nến...`);rawCandles=await fetchHistoricalKlines();if(s!==wsSession)return;refreshCandlesFromRaw();drawCharts();updateLatestPrice();updateTitle();
-    // Chừa khoảng trống 20 nến ở lề phải và nén nến nhỏ lại để thấy rõ xu hướng
-    if(candles.length>0){
-        priceChart.timeScale().setVisibleLogicalRange({ from: candles.length - 110, to: candles.length + 20 });
-        rsiChart.timeScale().setVisibleLogicalRange({ from: candles.length - 110, to: candles.length + 20 });
-    }
+    setTimeout(() => {
+        try { 
+            priceChart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 15 }); 
+            rsiChart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 15 }); 
+        } catch(e){}
+    }, 100);
 setDefaultBacktestRangeIfEmpty();startKlineWS(s);startTickerWS(s);loadTicker24h()}catch(e){console.error(e);if(s!==wsSession)return;setStatus(false,"Không tải được Binance API");$("priceChart").innerHTML='<div class="error">Không hiển thị được biểu đồ. Hãy kiểm tra internet/Binance hoặc chạy bằng local server.</div>'}}async function loadTicker24h(){try{const t=await (await fetch(`${API}/api/v3/ticker/24hr?symbol=${currentSymbol}`)).json();const p=+t.lastPrice,pct=+t.priceChangePercent;$("mainPrice").textContent="$"+fmt.format(p);$("mainChange").textContent=pct.toFixed(2)+"%";$("mainChange").className="change "+(pct>=0?"green":"red")}catch(e){}}function startKlineWS(s=wsSession){closeSocket(klineWs);const cfg=getTimeframeConfig(currentTf),stream=`${currentSymbol.toLowerCase()}@kline_${cfg.apiTf}`;klineWs=new WebSocket(`${WS_BASE}/${stream}`);klineWs.onopen=()=>{if(s===wsSession)setStatus(true,`Live ${cfg.label}`)};klineWs.onclose=()=>{if(s!==wsSession)return;setStatus(false,"Đang kết nối lại...");setTimeout(()=>{if(s===wsSession)startKlineWS(s)},1500)};klineWs.onerror=()=>{if(s===wsSession){setStatus(false,"Lỗi WebSocket");try{klineWs.close()}catch(e){}}};klineWs.onmessage=e=>{if(s!==wsSession)return;const k=JSON.parse(e.data).k,c={time:Math.floor(k.t/1000),open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v},last=rawCandles[rawCandles.length-1];if(last&&last.time===c.time)rawCandles[rawCandles.length-1]=c;else{rawCandles.push(c);if(rawCandles.length>getHistoryTargetLimit(currentTf)+100)rawCandles.shift()}refreshCandlesFromRaw();drawCharts();updateLatestPrice();document.title=`${fmt.format(c.close)} | ${$("symbolTitle").textContent}`;updateFloatingLegends()}}function startTickerWS(s=wsSession){closeSocket(tickerWs);tickerWs=new WebSocket(`${WS_BASE}/${currentSymbol.toLowerCase()}@miniTicker`);tickerWs.onclose=()=>{if(s===wsSession)setTimeout(()=>{if(s===wsSession)startTickerWS(s)},1500)};tickerWs.onerror=()=>{try{tickerWs.close()}catch(e){}};tickerWs.onmessage=e=>{if(s!==wsSession)return;const t=JSON.parse(e.data),price=+t.c,open=+t.o,pct=open?((price-open)/open)*100:0;$("mainPrice").textContent="$"+fmt.format(price);$("mainChange").textContent=pct.toFixed(2)+"%";$("mainChange").className="change "+(pct>=0?"green":"red")}}
 function updateLatestPrice(){const l=candles[candles.length-1];if(l)$("mainPrice").textContent="$"+fmt.format(l.close);updateFloatingLegends()}function updateTitle(){$("symbolTitle").textContent=currentSymbol.replace("USDT","/USD");document.title=`${$("symbolTitle").textContent} | XTB-Springtea`}function setStatus(on,text){$("wsDot").classList.toggle("online",on);$("wsStatus").textContent=text}
 
 function makeBacktestMarkers(trades,upto=null){const list=upto==null?trades:trades.slice(0,upto);const markers=[];list.forEach(t=>{markers.push({time:t.entryTime,position:t.side==="long"?"belowBar":"aboveBar",color:t.side==="long"?"#00c853":"#ff3b30",shape:t.side==="long"?"arrowUp":"arrowDown",text:`${t.n} ${t.side==="long"?"BUY":"SELL"}`});markers.push({time:t.exitTime,position:t.side==="long"?"aboveBar":"belowBar",color:t.pnl>=0?"#ffffff":"#b8bec9",shape:"circle",text:`${t.reason} ${fmt.format(t.pnl)}`})});return markers}function drawTradeLines(t){if(!t){btEntrySeries.setData([]);btSlSeries.setData([]);btTpSeries.setData([]);return}const sl=t.side==="long"?t.entry*(1-t.slPct):t.entry*(1+t.slPct);const span=[{time:t.entryTime,value:t.entry},{time:t.exitTime,value:t.entry}];btEntrySeries.setData(span);btSlSeries.setData([{time:t.entryTime,value:sl},{time:t.exitTime,value:sl}]);if(String(t.reason).includes("FORM")){btTpSeries.setData([{time:t.entryTime,value:t.exit},{time:t.exitTime,value:t.exit}])}else{btTpSeries.setData([])}}function showBacktestOnChart(trades,focusIndex=null){candleSeries.setMarkers(makeBacktestMarkers(trades));if(focusIndex!=null&&trades[focusIndex]){drawTradeLines(trades[focusIndex]);priceChart.timeScale().setVisibleRange({from:trades[focusIndex].entryTime,to:trades[focusIndex].exitTime})}else{drawTradeLines(trades[trades.length-1]||null)}}function clearBacktestOnChart(){backtestTrades=[];backtestReplayIndex=0;if(backtestReplayTimer){clearInterval(backtestReplayTimer);backtestReplayTimer=null}candleSeries.setMarkers([]);drawTradeLines(null);$("btReplayStatus").textContent="Đã xóa lệnh trên chart"}function replayBacktest(){if(!backtestTrades.length){alert("Hãy chạy backtest trước.");return}if(backtestReplayTimer){clearInterval(backtestReplayTimer);backtestReplayTimer=null;$("btReplay").textContent="Replay trên chart";return}backtestReplayIndex=0;drawTradeLines(null);candleSeries.setMarkers([]);$("btReplay").textContent="Tạm dừng replay";backtestReplayTimer=setInterval(()=>{backtestReplayIndex++;candleSeries.setMarkers(makeBacktestMarkers(backtestTrades,backtestReplayIndex));const t=backtestTrades[backtestReplayIndex-1];drawTradeLines(t);if(t)priceChart.timeScale().scrollToPosition(5,false);$("btReplayStatus").textContent=`Đang replay: ${Math.min(backtestReplayIndex,backtestTrades.length)}/${backtestTrades.length}`;if(backtestReplayIndex>=backtestTrades.length){clearInterval(backtestReplayTimer);backtestReplayTimer=null;$("btReplay").textContent="Replay trên chart";$("btReplayStatus").textContent="Replay hoàn tất"}},450)}function focusBacktestTrade(i){const t=backtestTrades[i];if(!t)return;showBacktestOnChart(backtestTrades,i);document.querySelectorAll("#btTrades tr").forEach(r=>r.classList.remove("selected"));const row=document.querySelector(`#btTrades tr[data-trade-index="${i}"]`);if(row)row.classList.add("selected");$("btReplayStatus").textContent=`Đang xem lệnh #${t.n}: ${t.side.toUpperCase()} ${formatChartTime(t.entryTime)}`}function formatInputDateFromTime(time){const d=dateInUtcPlus7(time);return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())}`}function inputDateToTimeStart(v){if(!v)return null;const [y,m,d]=v.split("-").map(Number);return Math.floor(Date.UTC(y,m-1,d,0,0,0)/1000)-TIMEZONE_OFFSET_SECONDS}function inputDateToTimeEnd(v){if(!v)return null;const [y,m,d]=v.split("-").map(Number);return Math.floor(Date.UTC(y,m-1,d+1,0,0,0)/1000)-TIMEZONE_OFFSET_SECONDS-1}function getBacktestRange(){return{from:inputDateToTimeStart($("btFrom").value),to:inputDateToTimeEnd($("btTo").value)}}function setDefaultBacktestRangeIfEmpty(){if(!candles.length)return;if(!$("btFrom")||!$("btTo"))return;if(!$("btFrom").value)$("btFrom").value=formatInputDateFromTime(candles[0].time);if(!$("btTo").value)$("btTo").value=formatInputDateFromTime(candles[candles.length-1].time)}function setBacktestPreset(mode){if(!candles.length)return;const last=candles[candles.length-1].time;let first=candles[0].time;if(mode!=="ALL"){const days={"3M":90,"6M":180,"1Y":365,"2Y":730}[mode]||365;first=last-days*86400}$("btFrom").value=formatInputDateFromTime(first);$("btTo").value=formatInputDateFromTime(last);$("btReplayStatus").textContent=`Khoảng backtest: ${$("btFrom").value} → ${$("btTo").value}`}function getByTime(arr){const m=new Map();arr.forEach(x=>m.set(x.time,x.value));return m}function runBacktest(){if(candles.length<80){alert("Chưa đủ dữ liệu để backtest.");return}const strategy=$("btStrategy").value,dir=$("btDirection").value,capital0=+$("btCapital").value||1000,riskPct=(+$("btRisk").value||2)/100,slPct=(+$("btSL").value||1)/100,feePct=(+$("btFee").value||0)/100;const emaMap=getByTime(ema(candles,9)),wmaMap=getByTime(wma(candles,45)),r=rsi(candles,14),rMap=getByTime(r),rE=ema(r.map(x=>({time:x.time,close:x.value})),9),rW=wma(r.map(x=>({time:x.time,close:x.value})),45),rEMap=getByTime(rE),rWMap=getByTime(rW);let equity=capital0,trades=[],pos=null,pendingReentry=null;function rsiForm(i){const c=candles[i],p=candles[i-1];if(!p||!c)return null;const a1=rEMap.get(c.time),b1=rWMap.get(c.time),a0=rEMap.get(p.time),b0=rWMap.get(p.time);if([a1,b1,a0,b0].some(v=>v==null))return null;if(a0<=b0&&a1>b1)return"long";if(a0>=b0&&a1<b1)return"short";return null}function rsiNature(i,side){const c=candles[i];if(!c)return false;const rv=rMap.get(c.time),re=rEMap.get(c.time);if(rv==null||re==null)return false;return side==="short"?rv<re:rv>re}function signal(i){const c=candles[i],p=candles[i-1];if(!p||!c)return null;let a1,b1,a0,b0;if(strategy==="rsiCross")return rsiForm(i);else if(strategy==="priceEma"){a1=c.close;b1=emaMap.get(c.time);a0=p.close;b0=emaMap.get(p.time)}else{a1=c.close;b1=wmaMap.get(c.time);a0=p.close;b0=wmaMap.get(p.time)}if([a1,b1,a0,b0].some(v=>v==null))return null;if(a0<=b0&&a1>b1)return"long";if(a0>=b0&&a1<b1)return"short";return null}function openPosition(side,next,slPrice,reentry=false){if((side==="long"&&dir==="short")||(side==="short"&&dir==="long"))return null;const entry=next.open;let sl=slPrice;if(sl==null)sl=side==="long"?entry*(1-slPct):entry*(1+slPct);const riskMove=side==="long"?(entry-sl)/entry:(sl-entry)/entry;if(riskMove<=0)return null;const riskMoney=equity*riskPct,size=riskMoney/riskMove;return{n:trades.length+1,side,entryTime:next.time,entry,sl,size,equityBefore:equity,slPct:riskMove,tpPct:0,reentry}}const range=getBacktestRange();for(let i=60;i<candles.length-1;i++){const next=candles[i+1];if(range.from&&next.time<range.from)continue;if(range.to&&candles[i].time>range.to)break;const form=rsiForm(i);if(pos){let exit=null,reason="";if(pos.side==="long"){if(next.low<=pos.sl){exit=pos.sl;reason="SL";pendingReentry={side:"long",sl:next.low,fromIndex:i+1}}else if(form==="short"){exit=next.open;reason="TP FORM SHORT";pendingReentry=null}}else{if(next.high>=pos.sl){exit=pos.sl;reason="SL";pendingReentry={side:"short",sl:next.high,fromIndex:i+1}}else if(form==="long"){exit=next.open;reason="TP FORM LONG";pendingReentry=null}}if(exit){const gross=pos.side==="long"?(exit-pos.entry)/pos.entry:(pos.entry-exit)/pos.entry;const pnl=pos.size*(gross-2*feePct);equity+=pnl;trades.push({...pos,exitTime:next.time,exit,reason,pnl,equity});pos=null}}if(!pos){if(pendingReentry&&i>=pendingReentry.fromIndex&&rsiNature(i,pendingReentry.side)){const rp=openPosition(pendingReentry.side,next,pendingReentry.sl,true);if(rp){pos=rp;pendingReentry=null;continue}}const sig=signal(i);if(!sig||(sig==="long"&&dir==="short")||(sig==="short"&&dir==="long"))continue;if(range.to&&next.time>range.to)continue;pos=openPosition(sig,next,null,false)}}backtestTrades=trades;renderBacktest(trades,capital0,equity);showBacktestOnChart(backtestTrades);const rangeText=`${$("btFrom").value||"ALL"} → ${$("btTo").value||"ALL"}`;$("btReplayStatus").textContent=`Đã vẽ ${trades.length} lệnh lên chart trong khoảng ${rangeText}. Sau SL sẽ vào lại nếu RSI vẫn giữ tính chất.`}function renderBacktest(trades,capital0,equity){const wins=trades.filter(t=>t.pnl>0),loss=trades.filter(t=>t.pnl<=0),wr=trades.length?wins.length/trades.length*100:0,net=equity-capital0,ret=capital0?net/capital0*100:0;let peak=capital0,dd=0;trades.forEach(t=>{peak=Math.max(peak,t.equity);dd=Math.max(dd,(peak-t.equity)/peak*100)});$("btSummary").innerHTML=`<div class="metric">Tổng lệnh<b>${trades.length}</b></div><div class="metric">Winrate<b>${wr.toFixed(1)}%</b></div><div class="metric">Net PnL<b class="${net>=0?'pnl-win':'pnl-loss'}">$${fmt.format(net)} / ${ret.toFixed(1)}%</b></div><div class="metric">Lệnh thắng<b>${wins.length}</b></div><div class="metric">Lệnh thua<b>${loss.length}</b></div><div class="metric">Max DD<b>${dd.toFixed(1)}%</b></div>`;$("btTrades").innerHTML=trades.slice().reverse().map(t=>`<tr data-trade-index="${t.n-1}" onclick="focusBacktestTrade(${t.n-1})"><td>${t.n}</td><td>${formatChartTime(t.entryTime)}</td><td>${t.side.toUpperCase()}</td><td>${fmt.format(t.entry)}</td><td>${fmt.format(t.exit)}</td><td>${t.reason}</td><td class="${t.pnl>=0?'pnl-win':'pnl-loss'}">${fmt.format(t.pnl)}</td><td>${fmt.format(t.equity)}</td></tr>`).join("")}
 
-// ==========================================
-// HÀM ÉP TẤT CẢ CHART CO GIÃN CƯỠNG CHẾ BẰNG PIXEL MỖI KHI RESIZE
-// ==========================================
 window.resizeCharts = function() {
     try {
         if ($("priceChart") && priceChart) priceChart.applyOptions({ width: $("priceChart").clientWidth, height: $("priceChart").clientHeight });
@@ -84,7 +80,7 @@ if (autoFitBtn) {
 }
 
 // ==========================================
-// MODULE: QUẢN LÝ ĐA MÀN HÌNH & FLOATING LEGEND
+// MODULE: QUẢN LÝ ĐA MÀN HÌNH & ẨN HIỆN HEADER & AUTOCOMPLETE
 // ==========================================
 let activePaneLayout = "main";
 const subPanesLayout = [
@@ -94,68 +90,45 @@ const subPanesLayout = [
 ];
 
 setTimeout(() => {
-    // 1. CHÈN CSS FIX TRÀN KHUNG FLEXBOX VÀ SẮP XẾP LẠI VỊ TRÍ MOBILE
     if (!document.getElementById('floatingLegendCss')) {
         const style = document.createElement('style');
         style.id = 'floatingLegendCss';
         style.innerHTML = `
             .floating-legend { 
-                position: absolute; z-index: 25; 
-                display: flex; flex-wrap: wrap; 
-                gap: 8px 12px; font-size: 12px; 
-                pointer-events: none; background: transparent; 
-                text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+                position: absolute; z-index: 25; display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; 
+                pointer-events: none; background: transparent; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
                 max-width: calc(100% - 65px); 
             }
             .floating-legend span { color: #d1d4dc; font-weight: 600; }
             .floating-legend b { font-family: monospace; font-size: 13px; margin-left: 3px; }
             .c-up { color: #00c853 !important; } .c-down { color: #ff3b30 !important; }
             
-            /* TỌA ĐỘ MẶC ĐỊNH (MÀN HÌNH LỚN) */
             #legPrice { top: 46px !important; left: 10px !important; } 
             #legRsiMain { top: 6px !important; left: 85px !important; } 
             [id^="legSub"] { top: 6px !important; left: 85px !important; }
             
-            /* SỬA LỖI ĐÈ CHỮ TRÊN ĐIỆN THOẠI / MÀN HÌNH NHỎ (<900px) */
+            /* CSS ẨN HEADER TRÊN MOBILE & RESPONSIVE */
             @media (max-width: 900px) {
-                /* Đẩy chữ giá xuống 80px để nhường chỗ cho thanh công cụ vẽ */
+                .topbar:not(.force-show) { display: none !important; }
+                .topbar.force-show { display: flex !important; flex-wrap: wrap; }
+                
+                #btnToggleHeader { display: inline-flex !important; align-items: center; justify-content: center; background: #2962ff; color: white; border: none; border-radius: 4px; padding: 0 8px; font-weight: bold; font-size: 12px; margin-right: 5px; height: 26px; cursor: pointer; }
+                
                 #legPrice { top: 80px !important; left: 6px !important; }
                 #legRsiMain, [id^="legSub"] { top: 6px !important; left: 60px !important; }
                 
-                /* Thu nhỏ font chữ và thêm nền mờ để dễ nhìn hơn */
-                .floating-legend { 
-                    font-size: 11px !important; gap: 4px 8px !important; 
-                    background: rgba(15,19,26,0.5) !important; 
-                    padding: 2px 4px; border-radius: 4px;
-                }
+                .floating-legend { font-size: 11px !important; gap: 4px 8px !important; background: rgba(15,19,26,0.5) !important; padding: 2px 4px; border-radius: 4px;}
                 .floating-legend b { font-size: 12px !important; }
             }
 
-            /* SỬA LỖI CO GIÃN: KHÓA KÍCH THƯỚC MIN VÀ ÉP CANVAS LUÔN THEO CONTAINER */
-            .chart-layout, .left-col, .right-col, .pane-container, .chart-flex-main, .chart-flex-sub, .chart-full { 
-                min-width: 0 !important; 
-                min-height: 0 !important; 
-                overflow: hidden !important; 
-            }
-            #priceChart, #rsiChart, [id^="rsiChartSub"] { 
-                position: relative !important; 
-                width: 100% !important; 
-                height: 100% !important; 
-            }
+            #btnToggleHeader { display: none; }
+
+            .chart-layout, .left-col, .right-col, .pane-container, .chart-flex-main, .chart-flex-sub, .chart-full { min-width: 0 !important; min-height: 0 !important; overflow: hidden !important; }
+            #priceChart, #rsiChart, [id^="rsiChartSub"] { position: relative !important; width: 100% !important; height: 100% !important; }
             .tv-lightweight-charts { width: 100% !important; height: 100% !important; }
 
-            /* FIX LỖI THANH SCROLL VÀ CHỐNG RỚT DÒNG TOOLBAR VẼ */
-            .drawing-toolbar {
-                flex-wrap: nowrap !important;
-                white-space: nowrap !important;
-                overflow-x: auto !important;
-                scrollbar-width: none !important; /* Dành cho Firefox */
-                -ms-overflow-style: none !important; /* Dành cho IE/Edge */
-            }
-            .drawing-toolbar::-webkit-scrollbar {
-                display: none !important; /* Dành cho Chrome/Safari */
-                height: 0 !important;
-            }
+            .drawing-toolbar { flex-wrap: nowrap !important; white-space: nowrap !important; overflow-x: auto !important; scrollbar-width: none !important; -ms-overflow-style: none !important; }
+            .drawing-toolbar::-webkit-scrollbar { display: none !important; height: 0 !important; }
         `;
         document.head.appendChild(style);
     }
@@ -178,33 +151,57 @@ setTimeout(() => {
     }
 
     const toolbar = document.querySelector('.toolbar');
-    if (toolbar && !document.getElementById('lay1')) {
-        const layoutSwitcher = document.createElement('div');
-        layoutSwitcher.style.cssText = "display:flex; align-items:center; gap:4px; margin-left:auto; border-left:1px solid #2a2e39; padding-left:10px;";
-        layoutSwitcher.innerHTML = `
-            <span style="color:#787b86; font-size:12px; font-weight:bold; margin-right:4px;">Layout:</span>
-            <button id="lay1" class="btn" title="1 Màn hình (Chỉ xem Chính)">1</button>
-            <button id="lay4" class="btn active" title="4 Màn hình (Chia Trái/Phải)" style="border-color:#2962ff; color:#fff; background:#1e222d;">4</button>
-        `;
-        toolbar.appendChild(layoutSwitcher);
+    if (toolbar) {
+        if (!document.getElementById('btnToggleHeader')) {
+            const tglBtn = document.createElement('button');
+            tglBtn.id = 'btnToggleHeader';
+            tglBtn.className = 'btn active';
+            tglBtn.innerHTML = '👁 Header';
+            toolbar.insertBefore(tglBtn, toolbar.firstChild);
+            
+            tglBtn.addEventListener('click', () => {
+                const tb = document.querySelector('.topbar');
+                if(tb) {
+                    tb.classList.toggle('force-show');
+                    setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+                }
+            });
+        }
 
-        const lay1 = document.getElementById('lay1');
-        const lay4 = document.getElementById('lay4');
-        const rightCol = document.querySelector('.right-col');
+        if (!document.getElementById('lay1')) {
+            const layoutSwitcher = document.createElement('div');
+            layoutSwitcher.style.cssText = "display:flex; align-items:center; gap:4px; margin-left:auto; border-left:1px solid #2a2e39; padding-left:10px;";
+            layoutSwitcher.innerHTML = `
+                <span style="color:#787b86; font-size:12px; font-weight:bold; margin-right:4px;">Layout:</span>
+                <button id="lay1" class="btn" title="1 Màn hình (Chỉ xem Chính)">1</button>
+                <button id="lay4" class="btn active" title="4 Màn hình (Chia Trái/Phải)" style="border-color:#2962ff; color:#fff; background:#1e222d;">4</button>
+            `;
+            toolbar.appendChild(layoutSwitcher);
 
-        lay1.addEventListener('click', () => {
-            lay1.style.cssText = "border-color:#2962ff; color:#fff; background:#1e222d;";
-            lay4.style.cssText = "";
-            if (rightCol) rightCol.style.display = 'none';
-            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50); 
-        });
+            const lay1 = document.getElementById('lay1');
+            const lay4 = document.getElementById('lay4');
+            const rightCol = document.querySelector('.right-col');
 
-        lay4.addEventListener('click', () => {
-            lay4.style.cssText = "border-color:#2962ff; color:#fff; background:#1e222d;";
-            lay1.style.cssText = "";
-            if (rightCol) rightCol.style.display = 'flex';
-            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50);
-        });
+            lay1.addEventListener('click', () => {
+                lay1.style.cssText = "border-color:#2962ff; color:#fff; background:#1e222d;";
+                lay4.style.cssText = "";
+                if (rightCol) rightCol.style.display = 'none';
+                setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50); 
+            });
+
+            lay4.addEventListener('click', () => {
+                lay4.style.cssText = "border-color:#2962ff; color:#fff; background:#1e222d;";
+                lay1.style.cssText = "";
+                if (rightCol) rightCol.style.display = 'flex';
+                setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50);
+            });
+
+            // TỰ ĐỘNG CHỌN LAYOUT DỰA VÀO KÍCH THƯỚC MÀN HÌNH LÚC MỚI VÀO
+            setTimeout(() => {
+                if (window.innerWidth < 900) { lay1.click(); } 
+                else { lay4.click(); }
+            }, 200);
+        }
     }
     
     function addDiv(parentId, id) {
@@ -219,6 +216,57 @@ setTimeout(() => {
     addDiv('priceChart', 'legPrice');
     addDiv('rsiChart', 'legRsiMain');
     subPanesLayout.forEach(pane => addDiv(pane.domId, 'legSub' + pane.id));
+
+    // ==========================================
+    // TÍNH NĂNG SUGGEST COIN TỪ BINANCE
+    // ==========================================
+    const symInput = document.getElementById('symbolInput');
+    if (symInput && !document.getElementById('symSuggest')) {
+        const suggestBox = document.createElement('div');
+        suggestBox.id = 'symSuggest';
+        suggestBox.style.cssText = "position:absolute; background:#1e222d; border:1px solid #2962ff; z-index:999; max-height:250px; overflow-y:auto; display:none; border-radius:4px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); min-width: 160px;";
+        
+        const parent = symInput.parentNode;
+        parent.style.position = 'relative';
+        parent.appendChild(suggestBox);
+
+        let coinList = [];
+        fetch('https://api.binance.com/api/v3/ticker/price')
+            .then(r => r.json())
+            .then(data => { coinList = data.map(d => d.symbol).filter(s => s.endsWith('USDT')); })
+            .catch(()=>{});
+
+        symInput.addEventListener('input', function() {
+            const val = this.value.trim().toUpperCase();
+            if(!val) { suggestBox.style.display = 'none'; return; }
+            
+            const matches = coinList.filter(c => c.includes(val)).slice(0, 15);
+            if(matches.length === 0) { suggestBox.style.display = 'none'; return; }
+            
+            suggestBox.innerHTML = '';
+            matches.forEach(m => {
+                const item = document.createElement('div');
+                item.textContent = m;
+                item.style.cssText = "padding: 8px 12px; cursor: pointer; color: #d1d4dc; font-weight: bold; border-bottom: 1px solid #2a2e39; font-size: 13px;";
+                item.onmouseenter = () => item.style.background = '#2962ff';
+                item.onmouseleave = () => item.style.background = 'transparent';
+                item.onclick = () => {
+                    symInput.value = m;
+                    suggestBox.style.display = 'none';
+                    document.getElementById('loadSymbol').click();
+                };
+                suggestBox.appendChild(item);
+            });
+            suggestBox.style.top = (symInput.offsetTop + symInput.offsetHeight + 4) + 'px';
+            suggestBox.style.left = symInput.offsetLeft + 'px';
+            suggestBox.style.display = 'block';
+        });
+
+        document.addEventListener('click', e => {
+            if(e.target !== symInput && e.target !== suggestBox) suggestBox.style.display = 'none';
+        });
+    }
+
 }, 100);
 
 function updateFloatingLegends(time) {
@@ -475,7 +523,7 @@ async function loadSubPaneData(pane) {
                 layout: { background: { color: "#0f131a" }, textColor: "#787b86" },
                 grid: { vertLines: { color: "rgba(42,46,57,.14)" }, horzLines: { color: "rgba(42,46,57,.14)" } },
                 rightPriceScale: { borderColor: "#2a2e39" },
-                timeScale: { borderColor: "#2a2e39", timeVisible: true, tickMarkFormatter: formatTickTime }
+                timeScale: { borderColor: "#2a2e39", timeVisible: true, tickMarkFormatter: formatTickTime, rightOffset: 5, barSpacing: 6 }
             });
             
             pane.series = pane.chart.addLineSeries({ color: "#fff", lineWidth: 2 });
@@ -497,14 +545,6 @@ async function loadSubPaneData(pane) {
         pane.series.setData(rsiData);
         pane.seriesEma.setData(rsiEmaData);
         pane.seriesWma.setData(rsiWmaData);
-        
-        // Đã cập nhật Margin nến trống bên phải
-        if(rsiData.length > 0) {
-            pane.chart.timeScale().setVisibleLogicalRange({
-                from: rsiData.length - 110,
-                to: rsiData.length + 20 
-            });
-        }
     } catch(e) { console.error("Lỗi tải pane RSI phụ:", e); }
 }
 

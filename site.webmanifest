@@ -1,0 +1,15 @@
+{
+  "name": "XTB-Springtea",
+  "short_name": "XTB-Springtea",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#131722",
+  "theme_color": "#131722",
+  "icons": [
+    {
+      "src": "assets/icons/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

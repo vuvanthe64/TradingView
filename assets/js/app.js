@@ -1,6 +1,16 @@
 const API="https://api.binance.com";const WS_BASE="wss://stream.binance.com:9443/ws";let currentSymbol="BTCUSDT",currentTf="1h",rawCandles=[],candles=[],klineWs=null,tickerWs=null,wsSession=0,resyncTimer=null,vwapAnchor="W",cache={};
-const indicatorState={emaPrice:true,wmaPrice:true,volume:true,vwap:true,baselineFast:true,baselineSlow:true,rsi:true,rsiEma:true,rsiWma:true,volMa:true};
-const BL_DEFAULTS={fast:{length:50,phase:5,power:2},slow:{length:200,phase:0,power:2}};let blSettings=loadBlSettings();const $=id=>document.getElementById(id);const fmt=new Intl.NumberFormat("en-US",{maximumFractionDigits:2});const fmtVol=new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:2});const TIMEZONE_OFFSET_SECONDS=7*60*60;
+// THÊM BIẾN LƯU CHIỀU DÀI EMA ĐỘNG (Mặc định 34)
+let emaDynLen = 38;
+const indicatorState={emaPrice:false,wmaPrice:false,volume:true,vwap:true,baselineFast:true,baselineSlow:true,rsi:true,rsiEma:true,rsiWma:true,volMa:true,emaDyn:true};
+
+// ĐỔI MẶC ĐỊNH BASELINE THÀNH 70 - 150
+const BL_DEFAULTS={fast:{length:70,phase:5,power:2},slow:{length:150,phase:0,power:2}};
+let blSettings=loadBlSettings();const $=id=>document.getElementById(id);
+const fmt=new Intl.NumberFormat("en-US",{maximumFractionDigits:2});
+const fmtVol=new Intl.NumberFormat("en-US",{notation:"compact",maximumFractionDigits:2});
+// ĐÃ THÊM FORMAT GIÁ CÓ DẤU PHẨY (VD: 65,200.0)
+const fmtPrice=new Intl.NumberFormat("en-US",{minimumFractionDigits: 1, maximumFractionDigits: 4});
+const TIMEZONE_OFFSET_SECONDS=7*60*60;
 
 function pad2(n){return String(n).padStart(2,"0")}
 function dateInUtcPlus7(time){return new Date((time+TIMEZONE_OFFSET_SECONDS)*1000)}
@@ -10,33 +20,52 @@ function formatTickTime(time){
     const d=dateInUtcPlus7(time), h=d.getUTCHours(), m=d.getUTCMinutes();
     return (h===7&&m===0)||(h===0&&m===0) ? `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth()+1)}` : `${pad2(h)}:${pad2(m)}`;
 }
-function clamp(n,min,max){return Math.max(min,Math.min(max,n))}function normalizeBlSettings(raw){const src=raw&&typeof raw==="object"?raw:{};return{fast:{length:clamp(parseInt(src.fast?.length??BL_DEFAULTS.fast.length)||BL_DEFAULTS.fast.length,1,1000),phase:clamp(parseFloat(src.fast?.phase??BL_DEFAULTS.fast.phase)||0,-100,100),power:clamp(parseInt(src.fast?.power??BL_DEFAULTS.fast.power)||BL_DEFAULTS.fast.power,1,10)},slow:{length:clamp(parseInt(src.slow?.length??BL_DEFAULTS.slow.length)||BL_DEFAULTS.slow.length,1,1000),phase:clamp(parseFloat(src.slow?.phase??BL_DEFAULTS.slow.phase)||0,-100,100),power:clamp(parseInt(src.slow?.power??BL_DEFAULTS.slow.power)||BL_DEFAULTS.slow.power,1,10)}}}function loadBlSettings(){try{return normalizeBlSettings(JSON.parse(localStorage.getItem("xtb_bl_jma_settings")||"{}"))}catch(e){return normalizeBlSettings({})}}function saveBlSettings(){localStorage.setItem("xtb_bl_jma_settings",JSON.stringify(blSettings))}function blName(kind){return `BL ${blSettings[kind].length}`}function setIfText(id,value){const el=$(id);if(el)el.textContent=value}function syncBlSettingsUi(){setIfText("blFastToggleLabel",blName("fast"));setIfText("blSlowToggleLabel",blName("slow"));setIfText("blFastValueLabel",blName("fast"));setIfText("blSlowValueLabel",blName("slow"));[["blFastLength",blSettings.fast.length],["blFastPhase",blSettings.fast.phase],["blFastPower",blSettings.fast.power],["blSlowLength",blSettings.slow.length],["blSlowPhase",blSettings.slow.phase],["blSlowPower",blSettings.slow.power]].forEach(([id,v])=>{const el=$(id);if(el)el.value=v});if(typeof baselineFastSeries!=="undefined")baselineFastSeries.applyOptions({title:blName("fast")});if(typeof baselineSlowSeries!=="undefined")baselineSlowSeries.applyOptions({title:blName("slow")})}function readBlSettingsFromUi(){blSettings=normalizeBlSettings({fast:{length:$("blFastLength")?.value,phase:$("blFastPhase")?.value,power:$("blFastPower")?.value},slow:{length:$("blSlowLength")?.value,phase:$("blSlowPhase")?.value,power:$("blSlowPower")?.value}});saveBlSettings();syncBlSettingsUi();drawCharts()}
+function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
+function normalizeBlSettings(raw){const src=raw&&typeof raw==="object"?raw:{};return{fast:{length:clamp(parseInt(src.fast?.length??BL_DEFAULTS.fast.length)||BL_DEFAULTS.fast.length,1,1000),phase:clamp(parseFloat(src.fast?.phase??BL_DEFAULTS.fast.phase)||0,-100,100),power:clamp(parseInt(src.fast?.power??BL_DEFAULTS.fast.power)||BL_DEFAULTS.fast.power,1,10)},slow:{length:clamp(parseInt(src.slow?.length??BL_DEFAULTS.slow.length)||BL_DEFAULTS.slow.length,1,1000),phase:clamp(parseFloat(src.slow?.phase??BL_DEFAULTS.slow.phase)||0,-100,100),power:clamp(parseInt(src.slow?.power??BL_DEFAULTS.slow.power)||BL_DEFAULTS.slow.power,1,10)}}}
+// Đổi key lưu trữ thành v4 để ép reset cấu hình cũ trên máy anh
+function loadBlSettings(){try{return normalizeBlSettings(JSON.parse(localStorage.getItem("xtb_bl_jma_settings_v4")||"{}"))}catch(e){return normalizeBlSettings({})}}function saveBlSettings(){localStorage.setItem("xtb_bl_jma_settings_v4",JSON.stringify(blSettings))}function blName(kind){return `BL ${blSettings[kind].length}`}function setIfText(id,value){const el=$(id);if(el)el.textContent=value}function syncBlSettingsUi(){setIfText("blFastToggleLabel",blName("fast"));setIfText("blSlowToggleLabel",blName("slow"));setIfText("blFastValueLabel",blName("fast"));setIfText("blSlowValueLabel",blName("slow"));[["blFastLength",blSettings.fast.length],["blFastPhase",blSettings.fast.phase],["blFastPower",blSettings.fast.power],["blSlowLength",blSettings.slow.length],["blSlowPhase",blSettings.slow.phase],["blSlowPower",blSettings.slow.power]].forEach(([id,v])=>{const el=$(id);if(el)el.value=v});if(typeof baselineFastSeries!=="undefined")baselineFastSeries.applyOptions({title:blName("fast")});if(typeof baselineSlowSeries!=="undefined")baselineSlowSeries.applyOptions({title:blName("slow")})}function readBlSettingsFromUi(){blSettings=normalizeBlSettings({fast:{length:$("blFastLength")?.value,phase:$("blFastPhase")?.value,power:$("blFastPower")?.value},slow:{length:$("blSlowLength")?.value,phase:$("blSlowPhase")?.value,power:$("blSlowPower")?.value}});saveBlSettings();syncBlSettingsUi();drawCharts()}
 
-const priceChart=LightweightCharts.createChart($("priceChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.18)"},horzLines:{color:"rgba(42,46,57,.18)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime,rightOffset:5,barSpacing:6},localization:{locale:"vi-VN",timeFormatter:formatChartTime},crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});const candleSeries=priceChart.addCandlestickSeries({upColor:"#ffffff",downColor:"#b8bec9",borderUpColor:"#ffffff",borderDownColor:"#b8bec9",wickUpColor:"#ffffff",wickDownColor:"#b8bec9"});const volumeSeries=priceChart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"",lastValueVisible:false,priceLineVisible:false,scaleMargins:{top:.8,bottom:0}});
+// TÍCH HỢP FORMAT GIÁ VÀO CHART
+const priceChart=LightweightCharts.createChart($("priceChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.18)"},horzLines:{color:"rgba(42,46,57,.18)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime,rightOffset:5,barSpacing:6},localization:{locale:"vi-VN",timeFormatter:formatChartTime, priceFormatter: p => fmtPrice.format(p)},crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});
+
+// THIẾT LẬP MÀU NẾN MỚI TỪ ẢNH TRADINGVIEW (Thân Trắng/Xám, Tắt viền, Râu Xanh/Đỏ)
+const candleSeries=priceChart.addCandlestickSeries({
+    upColor: '#ffffff',       // <-- ĐÂY LÀ MÀU THÂN NẾN TĂNG (Đang để Trắng)
+    downColor: '#8a919e',     // <-- ĐÂY LÀ MÀU THÂN NẾN GIẢM (Đang để Xám)
+    borderVisible: false,     // Trạng thái: Tắt viền nến
+    wickVisible: true,        // Trạng thái: Bật râu nến
+    wickUpColor: '#089981',   // Màu râu nến tăng (Xanh ngọc)
+    wickDownColor: '#f23645'  // Màu râu nến giảm (Đỏ)
+});
+
+const volumeSeries=priceChart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"",lastValueVisible:false,priceLineVisible:false,scaleMargins:{top:.8,bottom:0}});
 const volMaSeries=priceChart.addLineSeries({color:"rgba(255, 255, 255, 0.4)",lineWidth:1,priceScaleId:"",lastValueVisible:false,priceLineVisible:false});volMaSeries.priceScale().applyOptions({scaleMargins:{top:.8,bottom:0}});
-const emaPriceSeries=priceChart.addLineSeries({color:"#f0b90b",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const wmaPriceSeries=priceChart.addLineSeries({color:"#38bdf8",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const vwapSeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const baselineFastSeries=priceChart.addLineSeries({color:"#ffd54f",lineWidth:2,title:"BL 50",lastValueVisible:false,priceLineVisible:false});const baselineSlowSeries=priceChart.addLineSeries({color:"#9c27b0",lineWidth:2,title:"BL 200",lastValueVisible:false,priceLineVisible:false});const btEntrySeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btSlSeries=priceChart.addLineSeries({color:"#ff3b30",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btTpSeries=priceChart.addLineSeries({color:"#00c853",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});let backtestTrades=[],backtestReplayIndex=0,backtestReplayTimer=null;
+const emaPriceSeries=priceChart.addLineSeries({color:"#f0b90b",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const wmaPriceSeries=priceChart.addLineSeries({color:"#38bdf8",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});
+// KHỞI TẠO ĐƯỜNG EMA ĐỘNG MỚI (Màu xanh lá)
+const emaDynSeries=priceChart.addLineSeries({color:"#ffffff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});
+
+const vwapSeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const baselineFastSeries=priceChart.addLineSeries({color:"#ffd54f",lineWidth:2,title:"BL 75",lastValueVisible:false,priceLineVisible:false});const baselineSlowSeries=priceChart.addLineSeries({color:"#9c27b0",lineWidth:2,title:"BL 150",lastValueVisible:false,priceLineVisible:false});const btEntrySeries=priceChart.addLineSeries({color:"#2962ff",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btSlSeries=priceChart.addLineSeries({color:"#ff3b30",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});const btTpSeries=priceChart.addLineSeries({color:"#00c853",lineWidth:1,lineStyle:2,title:"",lastValueVisible:false,priceLineVisible:false});let backtestTrades=[],backtestReplayIndex=0,backtestReplayTimer=null;
 const rsiChart=LightweightCharts.createChart($("rsiChart"),{autoSize:true,layout:{background:{color:"#0f131a"},textColor:"#787b86"},grid:{vertLines:{color:"rgba(42,46,57,.14)"},horzLines:{color:"rgba(42,46,57,.14)"}},rightPriceScale:{borderColor:"#2a2e39"},timeScale:{borderColor:"#2a2e39",timeVisible:true,secondsVisible:false,tickMarkFormatter:formatTickTime,rightOffset:5,barSpacing:6},localization:{locale:"vi-VN",timeFormatter:formatChartTime}});const rsiSeries=rsiChart.addLineSeries({color:"#fff",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiEmaSeries=rsiChart.addLineSeries({color:"#ff9800",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsiWmaSeries=rsiChart.addLineSeries({color:"#ff3b30",lineWidth:2,title:"",lastValueVisible:false,priceLineVisible:false});const rsi70=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi50=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});const rsi30=rsiChart.addLineSeries({color:"#787b86",lineWidth:1,lineStyle:2,lastValueVisible:false,priceLineVisible:false});
 
 let lastRangeHash="";priceChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(!r)return;const hash=`${r.from.toFixed(2)}|${r.to.toFixed(2)}`;if(lastRangeHash===hash)return;lastRangeHash=hash;rsiChart.timeScale().setVisibleLogicalRange(r)});rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(!r)return;const hash=`${r.from.toFixed(2)}|${r.to.toFixed(2)}`;if(lastRangeHash===hash)return;lastRangeHash=hash;priceChart.timeScale().setVisibleLogicalRange(r)});
 
 function getTimeframeConfig(tf){const predefined={"1h":{apiTf:"1h",aggregate:1,label:"1H"},"4h":{apiTf:"4h",aggregate:1,label:"4H"},"12h":{apiTf:"12h",aggregate:1,label:"12H"},"1d":{apiTf:"1d",aggregate:1,label:"1D"},"2d":{apiTf:"1d",aggregate:2,label:"2D"},"3d":{apiTf:"3d",aggregate:1,label:"3D"},"1w":{apiTf:"1w",aggregate:1,label:"W"},"2w":{apiTf:"1w",aggregate:2,label:"2W"},"1M":{apiTf:"1M",aggregate:1,label:"M"}};if(predefined[tf])return predefined[tf];const match=tf.match(/^(\d+)([mhdWMY])$/);if(!match)return{apiTf:"1h",aggregate:1,label:"1H"};const num=parseInt(match[1]);const unit=match[2];let apiTf="1h",aggregate=1;if(unit==='m'){if([1,3,5,15,30].includes(num)){apiTf=num+"m";aggregate=1}else if(num%30===0){apiTf="30m";aggregate=num/30}else if(num%15===0){apiTf="15m";aggregate=num/15}else if(num%5===0){apiTf="5m";aggregate=num/5}else{apiTf="1m";aggregate=num}}else if(unit==='h'){if([1,2,4,6,8,12].includes(num)){apiTf=num+"h";aggregate=1}else{apiTf="1h";aggregate=num}}else if(unit==='d'){if([1,3].includes(num)){apiTf=num+"d";aggregate=1}else{apiTf="1d";aggregate=num}}else if(unit==='W'){apiTf="1w";aggregate=num}else if(unit==='M'){apiTf="1M";aggregate=num}else if(unit==='Y'){apiTf="1M";aggregate=num*12}return{apiTf,aggregate,label:num+(unit==='m'?'m':unit.toUpperCase())}}function getHistoryTargetLimit(tf=currentTf){const c={"1h":5000,"4h":5000,"12h":4000,"1d":3000,"2d":3000,"3d":2200,"1w":1200,"2w":1200,"1M":1000};if(c[tf])return c[tf];if(tf.endsWith('m'))return 5000;if(tf.endsWith('h'))return 4000;if(tf.endsWith('d'))return 3000;return 1500}function sleep(ms){return new Promise(r=>setTimeout(r,ms))}async function fetchHistoricalKlines(){const cfg=getTimeframeConfig(currentTf),target=getHistoryTargetLimit(currentTf);let endTime=Date.now(),all=[];for(let i=0;i<Math.ceil(target/1000)+2&&all.length<target;i++){const limit=Math.min(1000,target-all.length);const url=`${API}/api/v3/klines?symbol=${currentSymbol}&interval=${cfg.apiTf}&limit=${limit}&endTime=${endTime}`;const res=await fetch(url);if(!res.ok)throw new Error("Binance HTTP "+res.status);const part=await res.json();if(!Array.isArray(part)||!part.length)break;all=part.concat(all);endTime=part[0][0]-1;if(part.length<limit)break;await sleep(80)}return all.slice(-target).map(toChartCandle)}function toChartCandle(k){return{time:Math.floor(k[0]/1000),open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}}function aggregateCandles(src,g){if(g<=1)return src.slice();let r=[];for(let i=0;i<src.length;i+=g){const a=src.slice(i,i+g);if(a.length)r.push({time:a[0].time,open:a[0].open,high:Math.max(...a.map(x=>x.high)),low:Math.min(...a.map(x=>x.low)),close:a[a.length-1].close,volume:a.reduce((s,x)=>s+x.volume,0)})}return r}function refreshCandlesFromRaw(){candles=aggregateCandles(rawCandles,getTimeframeConfig(currentTf).aggregate)}function ema(data,n){let r=[],k=2/(n+1),p=null;data.forEach((c,i)=>{if(i<n-1)return;if(p===null){p=data.slice(i-n+1,i+1).reduce((s,x)=>s+x.close,0)/n}else p=c.close*k+p*(1-k);r.push({time:c.time,value:p})});return r}function wma(data,n){let r=[],ws=n*(n+1)/2;for(let i=n-1;i<data.length;i++){let s=0;for(let j=0;j<n;j++)s+=data[i-j].close*(n-j);r.push({time:data[i].time,value:s/ws})}return r}function rsi(data,n=14){let r=[];if(data.length<=n+1)return r;let g=0,l=0;for(let i=1;i<=n;i++){const d=data[i].close-data[i-1].close;if(d>=0)g+=d;else l-=d}let ag=g/n,al=l/n;for(let i=n+1;i<data.length;i++){const d=data[i].close-data[i-1].close,gain=d>0?d:0,loss=d<0?-d:0;ag=(ag*(n-1)+gain)/n;al=(al*(n-1)+loss)/n;const rs=al===0?100:ag/al;r.push({time:data[i].time,value:100-100/(1+rs)})}return r}function jma(data,length=50,power=2,phase=0){let r=[],phaseRatio=phase<-100?.5:phase>100?2.5:phase/100+1.5,beta=.45*(length-1)/(.45*(length-1)+2),alpha=Math.pow(beta,power),e0=0,e1=0,e2=0,prevJma=0;data.forEach(c=>{const src=c.close;e0=(1-alpha)*src+alpha*e0;e1=(src-e0)*(1-beta)+beta*e1;e2=(e0+phaseRatio*e1-prevJma)*Math.pow(1-alpha,2)+Math.pow(alpha,2)*e2;prevJma=e2+prevJma;r.push({time:c.time,value:prevJma})});return r}
-function getVwapColor(a=vwapAnchor){return a==="W"?"#2962ff":"#ffffff"}function updateVwapColor(){const color=getVwapColor();vwapSeries.applyOptions({color});document.querySelector('.vwap').style.background=color;document.querySelectorAll('.vwap-text').forEach(e=>e.style.color=color)}function getVwapBucket(time,anchor){const d=dateInUtcPlus7(time);if(anchor==="W"){const y=d.getUTCFullYear(),m=d.getUTCMonth(),day=d.getUTCDate(),dow=d.getUTCDay(),days=(dow+6)%7;const monday=new Date(Date.UTC(y,m,day-days,0,0,0));return `${monday.getUTCFullYear()}-${pad2(monday.getUTCMonth()+1)}-${pad2(monday.getUTCDate())}`}if(anchor==="M")return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}`;return `${d.getUTCFullYear()}`}function anchoredVwap(data,anchor="W"){let r=[],bucket=null,pv=0,vol=0;data.forEach(c=>{const b=getVwapBucket(c.time,anchor);if(b!==bucket){bucket=b;pv=0;vol=0}const tp=(c.high+c.low+c.close)/3;pv+=tp*c.volume;vol+=c.volume;if(vol>0)r.push({time:c.time,value:pv/vol})});return r}
+
+// FIX: Bọc Try/Catch và Check Null để code không bao giờ sập màn hình đen
+function getVwapColor(a=vwapAnchor){return a==="W"?"#2962ff":"#ffffff"}
+function updateVwapColor(){try{const color=getVwapColor();if(vwapSeries)vwapSeries.applyOptions({color});const vi=document.querySelector('.vwap');if(vi)vi.style.background=color;document.querySelectorAll('.vwap-text').forEach(e=>e.style.color=color)}catch(e){}}
+
+function getVwapBucket(time,anchor){const d=dateInUtcPlus7(time);if(anchor==="W"){const y=d.getUTCFullYear(),m=d.getUTCMonth(),day=d.getUTCDate(),dow=d.getUTCDay(),days=(dow+6)%7;const monday=new Date(Date.UTC(y,m,day-days,0,0,0));return `${monday.getUTCFullYear()}-${pad2(monday.getUTCMonth()+1)}-${pad2(monday.getUTCDate())}`}if(anchor==="M")return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}`;return `${d.getUTCFullYear()}`}function anchoredVwap(data,anchor="W"){let r=[],bucket=null,pv=0,vol=0;data.forEach(c=>{const b=getVwapBucket(c.time,anchor);if(b!==bucket){bucket=b;pv=0;vol=0}const tp=(c.high+c.low+c.close)/3;pv+=tp*c.volume;vol+=c.volume;if(vol>0)r.push({time:c.time,value:pv/vol})});return r}
 function smaVol(data, n) {let r=[];let sum=0;for(let i=0;i<data.length;i++){sum+=data[i].value;if(i>=n)sum-=data[i-n].value;if(i>=n-1)r.push({time:data[i].time,value:sum/n})}return r;}
 function lastValue(d){return d&&d.length?d[d.length-1].value:null}function setValueText(id,v,formatter=fmt){const el=$(id);if(!el)return;el.textContent=v==null||Number.isNaN(v)?"--":formatter.format(v)}
-function drawCharts(){updateVwapColor();candleSeries.setData(candles.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));const volumeData=candles.map(c=>({time:c.time,value:c.volume,color:c.close>=c.open?"rgba(255,255,255,.32)":"rgba(184,190,201,.28)"}));const emaPriceData=ema(candles,9),wmaPriceData=wma(candles,45),vwapData=anchoredVwap(candles,vwapAnchor),baselineFastData=jma(candles,blSettings.fast.length,blSettings.fast.power,blSettings.fast.phase),baselineSlowData=jma(candles,blSettings.slow.length,blSettings.slow.power,blSettings.slow.phase);
+function drawCharts(){updateVwapColor();candleSeries.setData(candles.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));const volumeData=candles.map(c=>({time:c.time,value:c.volume,color:c.close>=c.open?"rgba(255,255,255,.32)":"rgba(184,190,201,.28)"}));const emaPriceData=ema(candles,9),wmaPriceData=wma(candles,45),emaDynData=ema(candles,emaDynLen),vwapData=anchoredVwap(candles,vwapAnchor),baselineFastData=jma(candles,blSettings.fast.length,blSettings.fast.power,blSettings.fast.phase),baselineSlowData=jma(candles,blSettings.slow.length,blSettings.slow.power,blSettings.slow.phase);
 const volMaData = smaVol(volumeData, 20);volumeSeries.setData(indicatorState.volume?volumeData:[]);volMaSeries.setData(indicatorState.volMa?volMaData:[]);
-emaPriceSeries.setData(indicatorState.emaPrice?emaPriceData:[]);wmaPriceSeries.setData(indicatorState.wmaPrice?wmaPriceData:[]);vwapSeries.setData(indicatorState.vwap?vwapData:[]);baselineFastSeries.setData(indicatorState.baselineFast?baselineFastData:[]);baselineSlowSeries.setData(indicatorState.baselineSlow?baselineSlowData:[]);const rsiData=rsi(candles,14);rsiSeries.setData(indicatorState.rsi?rsiData:[]);const rsiAsClose=rsiData.map(x=>({time:x.time,close:x.value}));const rsiEmaData=ema(rsiAsClose,9),rsiWmaData=wma(rsiAsClose,45);rsiEmaSeries.setData(indicatorState.rsiEma?rsiEmaData:[]);rsiWmaSeries.setData(indicatorState.rsiWma?rsiWmaData:[]);const showRsi=indicatorState.rsi||indicatorState.rsiEma||indicatorState.rsiWma,bt=candles.map(c=>c.time);rsi70.setData(showRsi?bt.map(t=>({time:t,value:70})):[]);rsi50.setData(showRsi?bt.map(t=>({time:t,value:50})):[]);rsi30.setData(showRsi?bt.map(t=>({time:t,value:30})):[]);
-cache={emaPriceData,wmaPriceData,volumeData,volMaData,vwapData,baselineFastData,baselineSlowData,rsiData,rsiEmaData,rsiWmaData};updateIndicatorValues(cache);updateFloatingLegends()}
+emaPriceSeries.setData(indicatorState.emaPrice?emaPriceData:[]);wmaPriceSeries.setData(indicatorState.wmaPrice?wmaPriceData:[]);emaDynSeries.setData(indicatorState.emaDyn?emaDynData:[]);vwapSeries.setData(indicatorState.vwap?vwapData:[]);baselineFastSeries.setData(indicatorState.baselineFast?baselineFastData:[]);baselineSlowSeries.setData(indicatorState.baselineSlow?baselineSlowData:[]);const rsiData=rsi(candles,14);rsiSeries.setData(indicatorState.rsi?rsiData:[]);const rsiAsClose=rsiData.map(x=>({time:x.time,close:x.value}));const rsiEmaData=ema(rsiAsClose,9),rsiWmaData=wma(rsiAsClose,45);rsiEmaSeries.setData(indicatorState.rsiEma?rsiEmaData:[]);rsiWmaSeries.setData(indicatorState.rsiWma?rsiWmaData:[]);const showRsi=indicatorState.rsi||indicatorState.rsiEma||indicatorState.rsiWma,bt=candles.map(c=>c.time);rsi70.setData(showRsi?bt.map(t=>({time:t,value:70})):[]);rsi50.setData(showRsi?bt.map(t=>({time:t,value:50})):[]);rsi30.setData(showRsi?bt.map(t=>({time:t,value:30})):[]);
+cache={emaPriceData,wmaPriceData,emaDynData,volumeData,volMaData,vwapData,baselineFastData,baselineSlowData,rsiData,rsiEmaData,rsiWmaData};updateIndicatorValues(cache);updateFloatingLegends()}
 function updateIndicatorValues(d){setValueText("vEmaPrice",indicatorState.emaPrice?lastValue(d.emaPriceData):null);setValueText("vWmaPrice",indicatorState.wmaPrice?lastValue(d.wmaPriceData):null);setValueText("vVolume",indicatorState.volume&&d.volumeData.length?d.volumeData[d.volumeData.length-1].value:null,fmtVol);setValueText("vVwap",indicatorState.vwap?lastValue(d.vwapData):null);setIfText("vVwapAnchor",vwapAnchor);setValueText("vBaselineFast",indicatorState.baselineFast?lastValue(d.baselineFastData):null);setValueText("vBaselineSlow",indicatorState.baselineSlow?lastValue(d.baselineSlowData):null);setValueText("vRsi",indicatorState.rsi?lastValue(d.rsiData):null);setValueText("vRsiEma",indicatorState.rsiEma?lastValue(d.rsiEmaData):null);setValueText("vRsiWma",indicatorState.rsiWma?lastValue(d.rsiWmaData):null)}
 function closeSocket(ws){if(!ws)return;ws.onopen=ws.onmessage=ws.onerror=ws.onclose=null;try{ws.close()}catch(e){}}async function backgroundResyncKlines(){if(document.hidden)return;try{const s=wsSession;const data=await fetchHistoricalKlines();if(s!==wsSession)return;rawCandles=data;refreshCandlesFromRaw();drawCharts();updateLatestPrice()}catch(e){console.warn(e)}}
 
 async function loadKlines(){const s=++wsSession;closeSocket(klineWs);closeSocket(tickerWs);try{setStatus(false,`Đang tải dữ liệu lịch sử ${getHistoryTargetLimit(currentTf)} nến...`);rawCandles=await fetchHistoricalKlines();if(s!==wsSession)return;refreshCandlesFromRaw();drawCharts();updateLatestPrice();updateTitle();
-    setTimeout(() => {
-        try { 
-            priceChart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 15 }); 
-            rsiChart.timeScale().applyOptions({ barSpacing: 8, rightOffset: 15 }); 
-        } catch(e){}
-    }, 100);
 setDefaultBacktestRangeIfEmpty();startKlineWS(s);startTickerWS(s);loadTicker24h()}catch(e){console.error(e);if(s!==wsSession)return;setStatus(false,"Không tải được Binance API");$("priceChart").innerHTML='<div class="error">Không hiển thị được biểu đồ. Hãy kiểm tra internet/Binance hoặc chạy bằng local server.</div>'}}async function loadTicker24h(){try{const t=await (await fetch(`${API}/api/v3/ticker/24hr?symbol=${currentSymbol}`)).json();const p=+t.lastPrice,pct=+t.priceChangePercent;$("mainPrice").textContent="$"+fmt.format(p);$("mainChange").textContent=pct.toFixed(2)+"%";$("mainChange").className="change "+(pct>=0?"green":"red")}catch(e){}}function startKlineWS(s=wsSession){closeSocket(klineWs);const cfg=getTimeframeConfig(currentTf),stream=`${currentSymbol.toLowerCase()}@kline_${cfg.apiTf}`;klineWs=new WebSocket(`${WS_BASE}/${stream}`);klineWs.onopen=()=>{if(s===wsSession)setStatus(true,`Live ${cfg.label}`)};klineWs.onclose=()=>{if(s!==wsSession)return;setStatus(false,"Đang kết nối lại...");setTimeout(()=>{if(s===wsSession)startKlineWS(s)},1500)};klineWs.onerror=()=>{if(s===wsSession){setStatus(false,"Lỗi WebSocket");try{klineWs.close()}catch(e){}}};klineWs.onmessage=e=>{if(s!==wsSession)return;const k=JSON.parse(e.data).k,c={time:Math.floor(k.t/1000),open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v},last=rawCandles[rawCandles.length-1];if(last&&last.time===c.time)rawCandles[rawCandles.length-1]=c;else{rawCandles.push(c);if(rawCandles.length>getHistoryTargetLimit(currentTf)+100)rawCandles.shift()}refreshCandlesFromRaw();drawCharts();updateLatestPrice();document.title=`${fmt.format(c.close)} | ${$("symbolTitle").textContent}`;updateFloatingLegends()}}function startTickerWS(s=wsSession){closeSocket(tickerWs);tickerWs=new WebSocket(`${WS_BASE}/${currentSymbol.toLowerCase()}@miniTicker`);tickerWs.onclose=()=>{if(s===wsSession)setTimeout(()=>{if(s===wsSession)startTickerWS(s)},1500)};tickerWs.onerror=()=>{try{tickerWs.close()}catch(e){}};tickerWs.onmessage=e=>{if(s!==wsSession)return;const t=JSON.parse(e.data),price=+t.c,open=+t.o,pct=open?((price-open)/open)*100:0;$("mainPrice").textContent="$"+fmt.format(price);$("mainChange").textContent=pct.toFixed(2)+"%";$("mainChange").className="change "+(pct>=0?"green":"red")}}
 function updateLatestPrice(){const l=candles[candles.length-1];if(l)$("mainPrice").textContent="$"+fmt.format(l.close);updateFloatingLegends()}function updateTitle(){$("symbolTitle").textContent=currentSymbol.replace("USDT","/USD");document.title=`${$("symbolTitle").textContent} | XTB-Springtea`}function setStatus(on,text){$("wsDot").classList.toggle("online",on);$("wsStatus").textContent=text}
 
@@ -80,7 +109,7 @@ if (autoFitBtn) {
 }
 
 // ==========================================
-// MODULE: QUẢN LÝ ĐA MÀN HÌNH & ẨN HIỆN HEADER & AUTOCOMPLETE
+// MODULE: QUẢN LÝ ĐA MÀN HÌNH, MOBILE HEIGHT, AUTOCOMPLETE, VÀ TỶ LỆ CHIA
 // ==========================================
 let activePaneLayout = "main";
 const subPanesLayout = [
@@ -106,8 +135,14 @@ setTimeout(() => {
             #legPrice { top: 46px !important; left: 10px !important; } 
             #legRsiMain { top: 6px !important; left: 85px !important; } 
             [id^="legSub"] { top: 6px !important; left: 85px !important; }
+
+            /* CHIA TỶ LỆ 50/50 CHO DESKTOP */
+            @media (min-width: 901px) {
+                #priceChart { position: relative !important; width: 100% !important; height: 50% !important; flex: 1 1 50% !important; }
+                #rsiChart   { position: relative !important; width: 100% !important; height: 50% !important; flex: 1 1 50% !important; }
+            }
             
-            /* CSS ẨN HEADER TRÊN MOBILE & RESPONSIVE */
+            /* GIAO DIỆN MOBILE VÀ CHIA TỶ LỆ 60/40 */
             @media (max-width: 900px) {
                 .topbar:not(.force-show) { display: none !important; }
                 .topbar.force-show { display: flex !important; flex-wrap: wrap; }
@@ -119,14 +154,18 @@ setTimeout(() => {
                 
                 .floating-legend { font-size: 11px !important; gap: 4px 8px !important; background: rgba(15,19,26,0.5) !important; padding: 2px 4px; border-radius: 4px;}
                 .floating-legend b { font-size: 12px !important; }
+
+                /* KÉO DÀI XUỐNG ĐÁY MÀN HÌNH VÀ TỶ LỆ 60/40 */
+                .chart-layout { display: flex; flex-direction: column; height: calc(100vh - 50px) !important; }
+                .left-col { height: 100% !important; flex: 1 1 100% !important; display: flex; flex-direction: column; }
+                #priceChart { position: relative !important; width: 100% !important; height: 60% !important; flex: 1 1 60% !important; }
+                #rsiChart   { position: relative !important; width: 100% !important; height: 40% !important; flex: 1 1 40% !important; }
             }
 
             #btnToggleHeader { display: none; }
-
             .chart-layout, .left-col, .right-col, .pane-container, .chart-flex-main, .chart-flex-sub, .chart-full { min-width: 0 !important; min-height: 0 !important; overflow: hidden !important; }
-            #priceChart, #rsiChart, [id^="rsiChartSub"] { position: relative !important; width: 100% !important; height: 100% !important; }
+            [id^="rsiChartSub"] { position: relative !important; width: 100% !important; height: 100% !important; }
             .tv-lightweight-charts { width: 100% !important; height: 100% !important; }
-
             .drawing-toolbar { flex-wrap: nowrap !important; white-space: nowrap !important; overflow-x: auto !important; scrollbar-width: none !important; -ms-overflow-style: none !important; }
             .drawing-toolbar::-webkit-scrollbar { display: none !important; height: 0 !important; }
         `;
@@ -134,6 +173,37 @@ setTimeout(() => {
     }
 
     const legendBar = document.querySelector('.legend');
+
+    // NÚT CHỌN EMA ĐỘNG (34/89)
+    if (legendBar && !document.querySelector('[data-indicator="emaDyn"]')) {
+        const emaDynBox = document.createElement('div');
+        emaDynBox.style.cssText = "display:inline-flex; align-items:center; background:transparent; margin-right:8px;";
+        emaDynBox.innerHTML = `
+            <button class="toggle active" data-indicator="emaDyn" style="margin-right:2px; padding: 2px 5px;"><i class="vol" style="background:#4caf50"></i>EMA</button>
+            <select id="emaDynSelect" style="background:#1e222d; color:#d1d4dc; border:1px solid #2a2e39; border-radius:4px; padding:2px 4px; outline:none; cursor:pointer; font-size:12px; height:24px;">
+                <option value="38" selected>38</option>
+                <option value="89">89</option>
+            </select>
+        `;
+        
+        const wmaBtn = document.querySelector('[data-indicator="wmaPrice"]');
+        if (wmaBtn) legendBar.insertBefore(emaDynBox, wmaBtn.nextSibling);
+        else legendBar.appendChild(emaDynBox);
+        
+        const btnToggle = emaDynBox.querySelector('[data-indicator="emaDyn"]');
+        if(btnToggle) btnToggle.addEventListener('click', () => {
+            indicatorState.emaDyn = !indicatorState.emaDyn;
+            btnToggle.classList.toggle('active', indicatorState.emaDyn);
+            drawCharts();
+        });
+        
+        const sel = document.getElementById('emaDynSelect');
+        if(sel) sel.addEventListener('change', (e) => {
+            emaDynLen = parseInt(e.target.value);
+            drawCharts();
+        });
+    }
+
     if (legendBar && !document.querySelector('[data-indicator="volMa"]')) {
         const btn = document.createElement('button');
         btn.className = 'toggle active';
@@ -198,8 +268,8 @@ setTimeout(() => {
 
             // TỰ ĐỘNG CHỌN LAYOUT DỰA VÀO KÍCH THƯỚC MÀN HÌNH LÚC MỚI VÀO
             setTimeout(() => {
-                if (window.innerWidth < 900) { lay1.click(); } 
-                else { lay4.click(); }
+                if (window.innerWidth < 900) { if(lay1) lay1.click(); } 
+                else { if(lay4) lay4.click(); }
             }, 200);
         }
     }
@@ -217,9 +287,7 @@ setTimeout(() => {
     addDiv('rsiChart', 'legRsiMain');
     subPanesLayout.forEach(pane => addDiv(pane.domId, 'legSub' + pane.id));
 
-    // ==========================================
-    // TÍNH NĂNG SUGGEST COIN TỪ BINANCE
-    // ==========================================
+    // SUGGEST COIN (TỰ ĐỘNG TÌM KIẾM BINANCE COIN)
     const symInput = document.getElementById('symbolInput');
     if (symInput && !document.getElementById('symSuggest')) {
         const suggestBox = document.createElement('div');
@@ -227,8 +295,10 @@ setTimeout(() => {
         suggestBox.style.cssText = "position:absolute; background:#1e222d; border:1px solid #2962ff; z-index:999; max-height:250px; overflow-y:auto; display:none; border-radius:4px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); min-width: 160px;";
         
         const parent = symInput.parentNode;
-        parent.style.position = 'relative';
-        parent.appendChild(suggestBox);
+        if(parent) {
+            parent.style.position = 'relative';
+            parent.appendChild(suggestBox);
+        }
 
         let coinList = [];
         fetch('https://api.binance.com/api/v3/ticker/price')
@@ -253,7 +323,7 @@ setTimeout(() => {
                 item.onclick = () => {
                     symInput.value = m;
                     suggestBox.style.display = 'none';
-                    document.getElementById('loadSymbol').click();
+                    if(document.getElementById('loadSymbol')) document.getElementById('loadSymbol').click();
                 };
                 suggestBox.appendChild(item);
             });
@@ -284,20 +354,25 @@ function updateFloatingLegends(time) {
         const colorCls = change >= 0 ? 'c-up' : 'c-down';
         const sign = change >= 0 ? '+' : '';
         
-        let vol = 0, vMa = 0;
+        let vol = 0, vMa = 0, eDyn = 0;
         if (cache.volumeData) { const v = cache.volumeData.find(x => x.time === time); if(v) vol = v.value; }
         if (cache.volMaData) { const vm = cache.volMaData.find(x => x.time === time); if(vm) vMa = vm.value; }
+        if (cache.emaDynData) { const eD = cache.emaDynData.find(x => x.time === time); if(eD) eDyn = eD.value; }
+
+        const volMaHtml = indicatorState.volMa ? `<span style="color: rgba(255,255,255,0.6)">Vol MA: <b>${fmtVol.format(vMa)}</b></span>` : '';
+        const emaDynHtml = indicatorState.emaDyn ? `<span style="color: #ffffff">EMA${emaDynLen}: <b>${fmtPrice.format(eDyn)}</b></span>` : '';
 
         const legPrice = document.getElementById('legPrice');
         if (legPrice) {
             legPrice.innerHTML = `
-                <span>O: <b class="${colorCls}">${fmt.format(c.open)}</b></span>
-                <span>H: <b class="${colorCls}">${fmt.format(c.high)}</b></span>
-                <span>L: <b class="${colorCls}">${fmt.format(c.low)}</b></span>
-                <span>C: <b class="${colorCls}">${fmt.format(c.close)}</b></span>
-                <span>Biến: <b class="${colorCls}">${sign}${fmt.format(change)} (${sign}${pct.toFixed(2)}%)</b></span>
+                <span>O: <b class="${colorCls}">${fmtPrice.format(c.open)}</b></span>
+                <span>H: <b class="${colorCls}">${fmtPrice.format(c.high)}</b></span>
+                <span>L: <b class="${colorCls}">${fmtPrice.format(c.low)}</b></span>
+                <span>C: <b class="${colorCls}">${fmtPrice.format(c.close)}</b></span>
+                <span>Biến: <b class="${colorCls}">${sign}${fmtPrice.format(change)} (${sign}${pct.toFixed(2)}%)</b></span>
+                ${emaDynHtml}
                 <span>Vol: <b>${fmtVol.format(vol)}</b></span>
-                <span style="color: rgba(255,255,255,0.6)">Vol MA: <b>${fmtVol.format(vMa)}</b></span>
+                ${volMaHtml}
             `;
         }
     }
@@ -353,36 +428,40 @@ document.querySelectorAll('.pane-container').forEach(el => {
 });
 
 const tfGroup = document.getElementById("tfButtons");
-const newTfGroup = tfGroup.cloneNode(true);
-tfGroup.parentNode.replaceChild(newTfGroup, tfGroup);
+if(tfGroup) {
+    const newTfGroup = tfGroup.cloneNode(true);
+    if(tfGroup.parentNode) tfGroup.parentNode.replaceChild(newTfGroup, tfGroup);
 
-document.getElementById("tfButtons").addEventListener("click", e => {
-    const b = e.target.closest(".tf");
-    if (!b) return;
-    
-    document.querySelectorAll(".tf").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    const newTf = b.dataset.tf;
-    
-    if (activePaneLayout === 'main') {
-        currentTf = newTf;
-        document.getElementById("mainTfLabel").textContent = newTf.toUpperCase();
-        loadKlines(); 
-    } else {
-        const pane = subPanesLayout.find(p => p.id === activePaneLayout);
-        pane.tf = newTf;
-        document.getElementById(pane.labelId).textContent = newTf.toUpperCase();
-        loadSubPaneData(pane); 
-    }
-});
+    newTfGroup.addEventListener("click", e => {
+        const b = e.target.closest(".tf");
+        if (!b) return;
+        
+        document.querySelectorAll(".tf").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        const newTf = b.dataset.tf;
+        
+        if (activePaneLayout === 'main') {
+            currentTf = newTf;
+            if($("mainTfLabel")) $("mainTfLabel").textContent = newTf.toUpperCase();
+            loadKlines(); 
+        } else {
+            const pane = subPanesLayout.find(p => p.id === activePaneLayout);
+            if(pane) {
+                pane.tf = newTf;
+                if($(pane.labelId)) $(pane.labelId).textContent = newTf.toUpperCase();
+                loadSubPaneData(pane); 
+            }
+        }
+    });
+}
 
 const addCustomTfBtn = document.getElementById("addCustomTf");
 if (addCustomTfBtn) {
     addCustomTfBtn.addEventListener("click", () => {
-        const numStr = document.getElementById("customTfNum").value;
+        const numStr = document.getElementById("customTfNum")?.value;
         const num = numStr ? numStr.trim() : "";
-        const rawUnit = document.getElementById("customTfUnit").value;
-        if (!num || parseInt(num) < 1) return;
+        const rawUnit = document.getElementById("customTfUnit")?.value;
+        if (!num || parseInt(num) < 1 || !rawUnit) return;
         
         let unit = rawUnit;
         if (rawUnit === 'm') unit = 'm';
@@ -409,7 +488,7 @@ if (addCustomTfBtn) {
             if (autoFitBtn && autoFitBtn.parentNode) {
                 autoFitBtn.parentNode.insertBefore(btn, autoFitBtn);
             } else {
-                document.getElementById("tfButtons").appendChild(btn);
+                if($("tfButtons")) $("tfButtons").appendChild(btn);
             }
         }
         btn.click(); 
@@ -493,10 +572,14 @@ function centerAllChartsToTime(param) {
 }
 
 try {
-    priceChart.subscribeCrosshairMove(p => syncAllCrosshairs(p, 'price'));
-    rsiChart.subscribeCrosshairMove(p => syncAllCrosshairs(p, 'rsi'));
-    priceChart.subscribeClick(centerAllChartsToTime);
-    rsiChart.subscribeClick(centerAllChartsToTime);
+    if(priceChart) {
+        priceChart.subscribeCrosshairMove(p => syncAllCrosshairs(p, 'price'));
+        priceChart.subscribeClick(centerAllChartsToTime);
+    }
+    if(rsiChart) {
+        rsiChart.subscribeCrosshairMove(p => syncAllCrosshairs(p, 'rsi'));
+        rsiChart.subscribeClick(centerAllChartsToTime);
+    }
 } catch(e) {}
 
 async function loadSubPaneData(pane) {
@@ -545,10 +628,12 @@ async function loadSubPaneData(pane) {
         pane.series.setData(rsiData);
         pane.seriesEma.setData(rsiEmaData);
         pane.seriesWma.setData(rsiWmaData);
-    } catch(e) { console.error("Lỗi tải pane RSI phụ:", e); }
+    } catch(e) {}
 }
 
-document.getElementById("loadSymbol").addEventListener("click", () => {
-    setTimeout(() => { subPanesLayout.forEach(p => loadSubPaneData(p)); }, 500);
-});
+if($("loadSymbol")) {
+    $("loadSymbol").addEventListener("click", () => {
+        setTimeout(() => { subPanesLayout.forEach(p => loadSubPaneData(p)); }, 500);
+    });
+}
 subPanesLayout.forEach(p => loadSubPaneData(p));
